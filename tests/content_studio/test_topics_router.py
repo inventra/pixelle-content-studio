@@ -2,6 +2,26 @@
 
 from __future__ import annotations
 
+import textwrap
+
+
+_DAILY_NOTE_SAMPLE = textwrap.dedent(
+    """\
+    ## AI 工程情報早報
+
+    ### 1) 一個今天值得看的 AI 工具
+    - 類型：GitHub
+    - 重點：開源工具，把某個工作流自動化。
+    - 為什麼重要：壓低工程師每天的重複性勞動。
+    - 連結:
+      - GitHub: https://github.com/example/example
+
+    ## AI 工程情報晚報
+
+    - 待今日晚報自動補上
+    """
+)
+
 
 def _ingest_payload(title="Open Design", date="2026-05-03"):
     return {
@@ -76,6 +96,52 @@ def test_priority_clamped(client):
     out = client.post(f"/api/topics/{topic_id}/priority", params={"priority": 999})
     assert out.status_code == 200
     assert out.json()["topic"]["priority"] == 100
+
+
+def test_ingest_daily_note_404_when_missing(client, tmp_path):
+    resp = client.post(
+        "/api/topics/ingest/daily",
+        json={"date": "1999-01-01", "vault_root": str(tmp_path)},
+    )
+    assert resp.status_code == 404
+
+
+def test_ingest_daily_note_round_trip(client, tmp_path):
+    meetings = tmp_path / "meetings"
+    meetings.mkdir()
+    (meetings / "2026-05-03-daily-project-ai-sync.md").write_text(
+        _DAILY_NOTE_SAMPLE, encoding="utf-8"
+    )
+
+    resp = client.post(
+        "/api/topics/ingest/daily",
+        json={"date": "2026-05-03", "vault_root": str(tmp_path)},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["ingested"] == 1
+    assert body["date"] == "2026-05-03"
+    assert body["note_path"].endswith("2026-05-03-daily-project-ai-sync.md")
+    assert body["topics"][0]["source"]["source_type"] == "obsidian"
+
+    # Topic should now appear in /today.
+    today = client.get("/api/topics/today", params={"date": "2026-05-03"}).json()
+    assert any("AI 工具" in t["title"] for t in today["topics"])
+
+
+def test_ingest_daily_note_replaces_previous_run(client, tmp_path):
+    meetings = tmp_path / "meetings"
+    meetings.mkdir()
+    note = meetings / "2026-05-03-daily-project-ai-sync.md"
+    note.write_text(_DAILY_NOTE_SAMPLE, encoding="utf-8")
+
+    payload = {"date": "2026-05-03", "vault_root": str(tmp_path)}
+    client.post("/api/topics/ingest/daily", json=payload)
+    client.post("/api/topics/ingest/daily", json=payload)
+
+    today = client.get("/api/topics/today", params={"date": "2026-05-03"}).json()
+    # Idempotent: re-running must not duplicate.
+    assert len(today["topics"]) == 1
 
 
 def test_replace_for_date_drops_existing(client):

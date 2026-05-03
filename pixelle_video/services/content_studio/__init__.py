@@ -13,6 +13,12 @@ from pixelle_video.services.content_studio.storage import (
     reset_storage,
 )
 from pixelle_video.services.content_studio.news_ingest import NewsIngestService
+from pixelle_video.services.content_studio.obsidian_news_loader import (
+    DailyNoteNotFound,
+    daily_note_path,
+    load_candidates_for_date,
+    parse_daily_note,
+)
 from pixelle_video.services.content_studio.topic_selector import TopicSelector
 from pixelle_video.services.content_studio.draft_generator import DraftGenerator
 from pixelle_video.services.content_studio.storyboard_generator import StoryboardGenerator
@@ -28,6 +34,10 @@ __all__ = [
     "set_storage",
     "reset_storage",
     "NewsIngestService",
+    "DailyNoteNotFound",
+    "daily_note_path",
+    "load_candidates_for_date",
+    "parse_daily_note",
     "TopicSelector",
     "DraftGenerator",
     "StoryboardGenerator",

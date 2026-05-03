@@ -23,8 +23,10 @@ from api.schemas.content_studio import (
     TopicStatus,
 )
 from pixelle_video.services.content_studio import (
+    DailyNoteNotFound,
     NewsIngestService,
     TopicSelector,
+    daily_note_path,
     get_storage,
 )
 
@@ -95,6 +97,32 @@ def _ingest_form(storage):
                     st.rerun()
 
 
+def _daily_note_button(storage, target_iso: str):
+    """One-click ingest from the user's Obsidian daily briefing."""
+    note_path = daily_note_path(target_iso)
+    cols = st.columns([1, 3])
+    with cols[0]:
+        if st.button("📥 Ingest daily note", help=str(note_path)):
+            ingest = NewsIngestService(storage)
+            try:
+                topics = ingest.ingest_from_daily_note(
+                    target_date=target_iso,
+                    replace_for_date=True,
+                )
+            except DailyNoteNotFound:
+                st.error(f"Daily note not found: {note_path}")
+                return
+            if not topics:
+                st.warning("Daily note found but no AI-news items were detected.")
+            else:
+                st.success(f"Ingested {len(topics)} topics from {note_path.name}")
+                st.rerun()
+    with cols[1]:
+        exists = note_path.exists()
+        marker = "✅" if exists else "⚠️"
+        st.caption(f"{marker} `{note_path}`")
+
+
 def main():
     st.title("📰 Today's Topics")
     st.caption("Daily AI news → topic candidates → selection. Approval gate happens later in Content Studio.")
@@ -105,6 +133,7 @@ def main():
     target_date = st.date_input("Date", value=_date.today())
     target_iso = target_date.isoformat()
 
+    _daily_note_button(storage, target_iso)
     _ingest_form(storage)
 
     topics = storage.list_topics(date=target_iso)

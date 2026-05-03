@@ -11,6 +11,8 @@ from api.schemas.content_studio.topics import (
     TopicListResponse,
     TopicResponse,
     TopicSelectRequest,
+    DailyNoteIngestRequest,
+    DailyNoteIngestResponse,
 )
 from api.schemas.content_studio.drafts import (
     DraftSet,
@@ -46,6 +48,8 @@ __all__ = [
     "TopicListResponse",
     "TopicResponse",
     "TopicSelectRequest",
+    "DailyNoteIngestRequest",
+    "DailyNoteIngestResponse",
     # Drafts
     "DraftSet",
     "DraftGenerateRequest",

@@ -98,3 +98,27 @@ class TopicResponse(BaseModel):
 class TopicSelectRequest(BaseModel):
     """Optional override fields when selecting a topic"""
     notes: Optional[str] = None
+
+
+class DailyNoteIngestRequest(BaseModel):
+    """Trigger ingestion from the Obsidian daily briefing note."""
+    date: Optional[str] = Field(
+        None,
+        description="ISO date (YYYY-MM-DD); defaults to today.",
+    )
+    vault_root: Optional[str] = Field(
+        None,
+        description="Override the Obsidian vault root path (defaults to the configured one).",
+    )
+    replace_for_date: bool = Field(
+        True,
+        description="Replace any existing topics for this date so re-runs stay idempotent.",
+    )
+
+
+class DailyNoteIngestResponse(BaseModel):
+    success: bool = True
+    date: str
+    note_path: str
+    ingested: int
+    topics: List[Topic]

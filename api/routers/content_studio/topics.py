@@ -14,6 +14,8 @@ from api.routers.content_studio._deps import (
     TopicSelectorDep,
 )
 from api.schemas.content_studio import (
+    DailyNoteIngestRequest,
+    DailyNoteIngestResponse,
     Topic,
     TopicIngestRequest,
     TopicIngestResponse,
@@ -21,6 +23,10 @@ from api.schemas.content_studio import (
     TopicResponse,
     TopicSelectRequest,
     TopicStatus,
+)
+from pixelle_video.services.content_studio.obsidian_news_loader import (
+    DailyNoteNotFound,
+    daily_note_path,
 )
 from pixelle_video.services.content_studio.state_machine import (
     InvalidStateTransition,
@@ -39,6 +45,40 @@ async def ingest_topics(request: TopicIngestRequest, ingest: NewsIngestDep):
     except Exception as e:  # pragma: no cover - defensive
         logger.error(f"Topic ingest failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/ingest/daily", response_model=DailyNoteIngestResponse)
+async def ingest_from_daily_note(
+    ingest: NewsIngestDep,
+    request: Optional[DailyNoteIngestRequest] = None,
+):
+    """Ingest today's (or the given date's) Obsidian AI-news briefing.
+
+    Reads ``meetings/YYYY-MM-DD-daily-project-ai-sync.md`` from the
+    user's vault, extracts the morning/evening AI-news items, and
+    persists them as ``candidate`` topics. Re-running on the same
+    date replaces the previous run by default.
+    """
+    req = request or DailyNoteIngestRequest()
+    target = req.date or _date.today().isoformat()
+    path = daily_note_path(target, vault_root=req.vault_root)
+    try:
+        topics = ingest.ingest_from_daily_note(
+            target_date=target,
+            vault_root=req.vault_root,
+            replace_for_date=req.replace_for_date,
+        )
+    except DailyNoteNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:  # pragma: no cover - defensive
+        logger.error(f"Daily-note ingest failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    return DailyNoteIngestResponse(
+        date=target,
+        note_path=str(path),
+        ingested=len(topics),
+        topics=topics,
+    )
 
 
 @router.get("/today", response_model=TopicListResponse)
