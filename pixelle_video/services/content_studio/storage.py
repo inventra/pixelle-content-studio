@@ -116,12 +116,17 @@ class ContentStudioStorage:
         topics.sort(key=lambda t: (t.priority, t.created_at), reverse=True)
         return topics
 
+    def delete_topic(self, topic_id: str) -> bool:
+        path = self._path("topics", topic_id)
+        if path.exists():
+            path.unlink()
+            return True
+        return False
+
     def delete_topics_for_date(self, date: str) -> int:
         count = 0
         for topic in self.list_topics(date=date):
-            path = self._path("topics", topic.id)
-            if path.exists():
-                path.unlink()
+            if self.delete_topic(topic.id):
                 count += 1
         return count
 

@@ -10,7 +10,9 @@ from api.schemas.content_studio import (
     TopicSource,
     TopicStatus,
 )
-from pixelle_video.services.content_studio import NewsIngestService
+import asyncio
+
+from pixelle_video.services.content_studio import DraftGenerator, NewsIngestService, TopicSelector
 
 
 def test_ingest_creates_candidate_topics(storage):
@@ -62,3 +64,86 @@ def test_ingest_defaults_date_to_today(storage):
 def test_empty_ingest_is_a_noop(storage):
     service = NewsIngestService(storage)
     assert service.ingest([]) == []
+
+
+def test_reingest_preserves_progressed_topic_identity_and_status(storage):
+    service = NewsIngestService(storage)
+    [topic] = service.ingest(
+        [
+            TopicCandidate(
+                title="Open Design",
+                summary="First summary",
+                why_it_matters="First why",
+                source=TopicSource(source_type="obsidian", source_ref="2026-05-03-daily-project-ai-sync.md"),
+                date="2026-05-03",
+            )
+        ]
+    )
+    TopicSelector(storage).select(topic.id)
+    asyncio.run(DraftGenerator(storage).generate(topic.id))
+    DraftGenerator(storage).approve(topic.id, approved=True)
+
+    [reingested] = service.ingest(
+        [
+            TopicCandidate(
+                title="Open Design",
+                summary="Updated summary",
+                why_it_matters="Updated why",
+                source=TopicSource(source_type="obsidian", source_ref="2026-05-03-daily-project-ai-sync.md"),
+                date="2026-05-03",
+            )
+        ],
+        replace_for_date=True,
+    )
+
+    assert reingested.id == topic.id
+    assert reingested.status == TopicStatus.DRAFT_APPROVED
+    assert reingested.summary == "Updated summary"
+    assert storage.get_drafts(topic.id).approved_for_video is True
+
+
+def test_reingest_drops_stale_candidates_but_keeps_active_work(storage):
+    service = NewsIngestService(storage)
+    [active] = service.ingest(
+        [
+            TopicCandidate(
+                title="Keep Me",
+                source=TopicSource(source_type="obsidian", source_ref="note.md"),
+                date="2026-05-03",
+            )
+        ]
+    )
+    TopicSelector(storage).select(active.id)
+
+    service.ingest(
+        [
+            TopicCandidate(
+                title="Old Candidate",
+                source=TopicSource(source_type="obsidian", source_ref="note.md"),
+                date="2026-05-03",
+            )
+        ]
+    )
+
+    rows = service.ingest(
+        [
+            TopicCandidate(
+                title="Keep Me",
+                source=TopicSource(source_type="obsidian", source_ref="note.md"),
+                date="2026-05-03",
+            ),
+            TopicCandidate(
+                title="Fresh Candidate",
+                source=TopicSource(source_type="obsidian", source_ref="note.md"),
+                date="2026-05-03",
+            ),
+        ],
+        replace_for_date=True,
+    )
+
+    assert {t.title for t in rows} == {"Keep Me", "Fresh Candidate"}
+    saved = storage.list_topics(date="2026-05-03")
+    assert {t.title for t in saved} == {"Keep Me", "Fresh Candidate"}
+    keep = next(t for t in saved if t.title == "Keep Me")
+    assert keep.id == active.id
+    assert keep.status == TopicStatus.SELECTED

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import uuid
+from collections import defaultdict
 from datetime import date as _date
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +24,38 @@ from pixelle_video.services.content_studio.storage import ContentStudioStorage
 
 def _today_str() -> str:
     return _date.today().isoformat()
+
+
+def _identity_parts(*, date: str, title: str, source_type: str, source_ref: str | None, source_url: str | None) -> tuple[str, str, str, str, str]:
+    return (
+        date.strip(),
+        title.strip().casefold(),
+        source_type.strip().casefold(),
+        (source_ref or "").strip().casefold(),
+        (source_url or "").strip(),
+    )
+
+
+def _identity_key_for_candidate(candidate: TopicCandidate, topic_date: str) -> str:
+    parts = _identity_parts(
+        date=topic_date,
+        title=candidate.title,
+        source_type=candidate.source.source_type,
+        source_ref=candidate.source.source_ref,
+        source_url=candidate.source.source_url,
+    )
+    return hashlib.sha1("\x1f".join(parts).encode("utf-8")).hexdigest()
+
+
+def _identity_key_for_topic(topic: Topic) -> str:
+    parts = _identity_parts(
+        date=topic.date,
+        title=topic.title,
+        source_type=topic.source.source_type,
+        source_ref=topic.source.source_ref,
+        source_url=topic.source.source_url,
+    )
+    return hashlib.sha1("\x1f".join(parts).encode("utf-8")).hexdigest()
 
 
 class NewsIngestService:
@@ -45,18 +79,34 @@ class NewsIngestService:
         if not candidates:
             return []
 
-        if replace_for_date:
-            # Drop the existing rows for every distinct date in the batch.
-            distinct_dates = {c.date or _today_str() for c in candidates}
-            for d in distinct_dates:
-                self.storage.delete_topics_for_date(d)
-
-        topics: List[Topic] = []
         now = datetime.utcnow()
+        existing_by_date: dict[str, dict[str, Topic]] = {}
+        candidate_keys_by_date: dict[str, set[str]] = defaultdict(set)
         for c in candidates:
             topic_date = c.date or _today_str()
+            existing_by_date.setdefault(
+                topic_date,
+                {_identity_key_for_topic(t): t for t in self.storage.list_topics(date=topic_date)},
+            )
+            candidate_keys_by_date[topic_date].add(_identity_key_for_candidate(c, topic_date))
+
+        if replace_for_date:
+            for topic_date, existing_topics in existing_by_date.items():
+                incoming_keys = candidate_keys_by_date[topic_date]
+                for identity_key, topic in list(existing_topics.items()):
+                    if identity_key in incoming_keys:
+                        continue
+                    if topic.status in {TopicStatus.CANDIDATE, TopicStatus.SKIPPED}:
+                        self.storage.delete_topic(topic.id)
+                        existing_topics.pop(identity_key, None)
+
+        topics: List[Topic] = []
+        for c in candidates:
+            topic_date = c.date or _today_str()
+            identity_key = _identity_key_for_candidate(c, topic_date)
+            existing = existing_by_date[topic_date].get(identity_key)
             topic = Topic(
-                id=str(uuid.uuid4()),
+                id=existing.id if existing else str(uuid.uuid4()),
                 date=topic_date,
                 title=c.title.strip(),
                 summary=c.summary.strip(),
@@ -64,11 +114,14 @@ class NewsIngestService:
                 source=c.source,
                 recommended_formats=list(c.recommended_formats),
                 priority=c.priority,
-                status=TopicStatus.CANDIDATE,
-                created_at=now,
+                status=existing.status if existing else TopicStatus.CANDIDATE,
+                notes=existing.notes if existing else None,
+                created_at=existing.created_at if existing else now,
                 updated_at=now,
             )
-            topics.append(self.storage.save_topic(topic))
+            saved = self.storage.save_topic(topic)
+            existing_by_date[topic_date][identity_key] = saved
+            topics.append(saved)
         return topics
 
     def ingest_from_daily_note(
