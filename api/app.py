@@ -54,6 +54,9 @@ from api.routers import (
     files_router,
     resources_router,
     frame_router,
+    topics_router,
+    drafts_router,
+    storyboards_router,
 )
 
 
@@ -134,6 +137,11 @@ app.include_router(files_router, prefix=api_config.api_prefix)
 app.include_router(resources_router, prefix=api_config.api_prefix)
 app.include_router(frame_router, prefix=api_config.api_prefix)
 
+# Content Studio routers (orchestration layer on top of Pixelle-Video)
+app.include_router(topics_router, prefix=api_config.api_prefix)
+app.include_router(drafts_router, prefix=api_config.api_prefix)
+app.include_router(storyboards_router, prefix=api_config.api_prefix)
+
 
 @app.get("/")
 async def root():
@@ -153,6 +161,9 @@ async def root():
             "files": f"{api_config.api_prefix}/files",
             "resources": f"{api_config.api_prefix}/resources",
             "frame": f"{api_config.api_prefix}/frame",
+            "topics": f"{api_config.api_prefix}/topics",
+            "drafts": f"{api_config.api_prefix}/drafts",
+            "storyboards": f"{api_config.api_prefix}/storyboards",
         }
     }
 

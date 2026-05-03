@@ -39,22 +39,50 @@ st.set_page_config(
 
 def main():
     """Main entry point with navigation"""
-    # Define pages using st.Page
+    # Existing Pixelle-Video pages (kept untouched)
     home_page = st.Page(
         "pages/1_🎬_Home.py",
         title="Home",
         icon="🎬",
         default=True
     )
-    
+
     history_page = st.Page(
         "pages/2_📚_History.py",
         title="History",
         icon="📚"
     )
-    
-    # Set up navigation and run
-    pg = st.navigation([home_page, history_page])
+
+    # Content Studio pages (orchestration layer on top of Pixelle-Video).
+    # These are independent of LazyOffice and live alongside the existing
+    # video pages.
+    topics_page = st.Page(
+        "pages/3_📰_Topics.py",
+        title="Topics",
+        icon="📰",
+    )
+    studio_page = st.Page(
+        "pages/4_✍️_Content_Studio.py",
+        title="Content Studio",
+        icon="✍️",
+    )
+    video_lab_page = st.Page(
+        "pages/5_🎞️_Video_Lab.py",
+        title="Video Lab",
+        icon="🎞️",
+    )
+    assets_page = st.Page(
+        "pages/6_📦_Assets.py",
+        title="Assets",
+        icon="📦",
+    )
+
+    pg = st.navigation(
+        {
+            "Pixelle-Video": [home_page, history_page],
+            "Content Studio": [topics_page, studio_page, video_lab_page, assets_page],
+        }
+    )
     pg.run()
 
 
