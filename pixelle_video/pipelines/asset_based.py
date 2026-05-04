@@ -452,10 +452,10 @@ class AssetBasedPipeline(LinearVideoPipeline):
         
         context.narrations = all_narrations
         
-        # Get template dimensions
-        # Use asset_default.html template which supports both image and video assets
-        # (conditionally shows background image or provides transparent overlay)
-        template_name = "1080x1920/asset_default.html"
+        # Get template dimensions.
+        # asset_default.html supports both image and video assets
+        # (conditionally shows background image or provides transparent overlay).
+        template_name = context.params.get("frame_template", "1080x1920/asset_default.html")
         # Extract dimensions from template name (e.g., "1080x1920")
         try:
             dims = template_name.split("/")[0].split("x")

@@ -66,6 +66,19 @@ def test_script_then_storyboard_advances_state(storage):
     assert storyboard.estimated_cost_band in {"low", "medium", "high"}
 
 
+def test_default_storyboard_uses_lazy_office_opening_and_cta(storage):
+    topic_id = _approved_topic(storage)
+    sb = StoryboardGenerator(storage)
+
+    script = asyncio.run(sb.generate_script(topic_id, duration_target=45))
+    assert script.hook.startswith("今天這題")
+    assert "想看實作" in script.cta
+
+    storyboard = asyncio.run(sb.generate_storyboard(topic_id))
+    assert len(storyboard.scenes) == 4
+    assert "Lazy Office sloth mascot" in storyboard.scenes[0].visual_prompt
+
+
 def test_storyboard_requires_script_first(storage):
     topic_id = _approved_topic(storage)
     sb = StoryboardGenerator(storage)

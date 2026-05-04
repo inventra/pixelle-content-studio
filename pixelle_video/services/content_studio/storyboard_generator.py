@@ -9,7 +9,6 @@ video — the approval gate is enforced here as well as in the router.
 from __future__ import annotations
 
 import inspect
-import math
 import re
 from typing import Awaitable, Callable, List, Optional
 
@@ -31,6 +30,16 @@ from pixelle_video.services.content_studio.storage import ContentStudioStorage
 
 
 LLMCaller = Callable[[str], "str | Awaitable[str]"]
+
+
+_DEFAULT_SCENE_COUNT = 4
+_LAZY_OFFICE_VISUAL_BASE = (
+    "American cute illustration, Notion hand-drawn notebook vibe, bright white "
+    "background with subtle gray grid pattern, thick dark-brown rounded bento "
+    "card borders, masking tape, soft shadows, warm yellow, mint green, tech "
+    "blue, soft purple accents, Lazy Office sloth mascot, practical office "
+    "automation aesthetic, vector-like bold outlines, clean subtitle-safe areas"
+)
 
 
 class StoryboardGenerator:
@@ -69,7 +78,7 @@ class StoryboardGenerator:
             hook=hook,
             body=body,
             cta=cta,
-            voice_style=voice_style or "calm-narrator",
+            voice_style=voice_style or "lazy-office-practical",
         )
         self.storage.save_script(script)
 
@@ -140,8 +149,9 @@ class StoryboardGenerator:
             f"Write a short-video voiceover (~{duration_target}s) for the topic '{topic.title}'.\n"
             f"Angle: {angle or topic.title}\n"
             f"Source draft (Substack):\n{drafts.substack_draft}\n\n"
-            f"Constraints: punchy, conversational, end with a clear takeaway. "
-            f"Do not include scene labels."
+            f"Constraints: Traditional Chinese, punchy, conversational, Lazy Office tone. "
+            f"Cover plain-language news, work scenario translation, and a practical judgment. "
+            f"Do not include scene labels or the final CTA."
         )
         llm_text = await self._maybe_llm(prompt)
         if llm_text:
@@ -159,17 +169,20 @@ class StoryboardGenerator:
         angle: Optional[str],
     ) -> str:
         prompt = (
-            f"Write a 1-sentence hook for a short video about '{topic.title}'. "
-            f"Angle: {angle or topic.title}. Keep it under 18 words."
+            f"Write a 1-sentence Traditional Chinese Lazy Office opening hook for a short video "
+            f"about '{topic.title}'. Angle: {angle or topic.title}. It must fit the first 3 seconds, "
+            f"answer at least two of: who should care, what job/task it affects, and whether it is "
+            f"worth testing or waiting. Keep it under 45 Chinese characters."
         )
         llm_text = await self._maybe_llm(prompt)
         if llm_text:
             return llm_text.split("\n")[0].strip()
-        return f"Here's why {topic.title} matters today."
+        return "今天這題，重點是能不能幫團隊少做幾步。"
 
     @staticmethod
     def _compose_cta(topic: Topic) -> str:
-        return f"Save this — and tell me what you'd build with {topic.title.split(':')[0].strip() or 'it'}."
+        subject = topic.title.split(":")[0].strip() or "這個題目"
+        return f"如果你想看我把 {subject} 拆成實際用法，留言「想看實作」。"
 
     async def _maybe_llm(self, prompt: str) -> Optional[str]:
         if self.llm_caller is None:
@@ -190,7 +203,7 @@ class StoryboardGenerator:
         if not sentences:
             sentences = [script.body or script.hook or "Scene placeholder."]
 
-        target = n_scenes or max(3, min(8, math.ceil(script.duration_target / 8)))
+        target = n_scenes or _DEFAULT_SCENE_COUNT
         per_scene_seconds = round(script.duration_target / target, 2)
 
         # Bucket sentences into exactly `target` chunks. If we don't have
@@ -270,9 +283,11 @@ def _bucket_sentences(sentences: List[str], buckets: int) -> List[str]:
 
 def _voiceover_to_visual(voiceover: str) -> str:
     summary = voiceover[:120]
-    return f"Editorial cinematic shot illustrating: {summary}"
+    return f"{_LAZY_OFFICE_VISUAL_BASE}, visualizing: {summary}"
 
 
 def _short_caption(voiceover: str) -> str:
     words = voiceover.split()
+    if len(words) <= 1 and len(voiceover) > 18:
+        return voiceover[:18]
     return " ".join(words[:6])
